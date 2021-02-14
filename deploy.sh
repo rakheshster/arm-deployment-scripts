@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 IFS=$'\n\t'
 
 # -e: immediately exit if any command has a non-zero exit status
@@ -23,7 +23,7 @@ function usage() {
 # check if we are logged in and exit script if not.
 # this is a little workaround to see if we are still logged in. the `list-locations` subcommand needs you to be logged in.
 # other `az account` subcommands seem to rely on cached information.
-az account list-locations || exit 1
+az account list-locations >/dev/null || exit 1
 
 # check for the jq command
 if ! command -v jq &> /dev/null; then echo "Cannot find jq. Please install it and retry."; exit 1; fi
@@ -63,10 +63,10 @@ if [ -z "$resourceGroupName" ]; then
 	usage
 else
 	# check if the resourcegroup exists
-	testResourceGroup=$(az group show --name ${resourceGroupName} 2>/dev/null)
-	if [ $? -eq 0 ];
+	rgLocation=$(az group list | jq -r --arg resourceGroupName "$resourceGroupName" 'map(select(.name == "$resourceGroupName")) | .[] | .location')
+	if [ -z $rgLocation ]; then
 		# all good, let's capture the location for future use
-		resourceGroupLocation=$(az group show --name ${resourceGroupName} | jq -r '.location')
+		resourceGroupLocation=$rgLocation
 		echo "Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}"
 	else
 		if [ ! -z $resourceGroupLocation ]; then
@@ -84,7 +84,7 @@ fi
 if [ -z "$templateFilePath" ]; then
 	templateFilePath="${artifactsStagingDirectory}/azuredeploy.json"
 	
-	if [ -f "templateFilePath" ]; 
+	if [ -e "$templateFilePath" ]; then
 		echo "Found and will use ${templateFilePath} as the template"
 	else
 		echo "Missing templateFilePath. Tried ${templateFilePath}"
@@ -96,7 +96,7 @@ fi
 if [ -z "$parametersFilePath" ]; then
 	parametersFilePath="${artifactsStagingDirectory}/azuredeploy.parameters.json"
 
-	if [ -f "parametersFilePath" ]; 
+	if [ -e "$parametersFilePath" ]; then
 		echo "Found and will use ${parametersFilePath} as the parameters file"
 	else
 		echo "Continuing without a parameters file as none was specifed and nothing found at ${parametersFilePath} either"
@@ -108,53 +108,53 @@ unset uploadRequired
 unset artifactsUrlRequired
 # Check the template file to see if there's any mention of artifacts
 # jq doesn't like comments so I strip them out first
-testForArtifacts=$(grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation')
-if [ $testForArtifacts == "null" ]; then
+testForArtifacts=`grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation'`
+if [ "$testForArtifacts" == "null" ]; then
 	uploadRequired=false
 else
 	uploadRequired=true
 fi
 
 # if there is mention of artifacts then we must upload to the storage account
-if [ $uploadRequired == true ];
+if [ "$uploadRequired" == "true" ]; then
 	# explictly unset this variable so I know it's not set at the beginning of this 
 	unset artifactsLocation
 	unset artifactsLocationSasToken
 	unset createstorageaccount
 
 	# if there's a parameters file read it for the value of artifacts location & token
-	if [ ! -z "$parametersFilePath" ]
-		artifactsLocation=$(grep -v "^\s*//" ${parametersFilePath} | jq '.parameters._artifactsLocation.value')
+	if [ ! -z "$parametersFilePath" ]; then
+		artifactsLocation=`grep -v "^\s*//" ${parametersFilePath} | jq '.parameters._artifactsLocation.value'`
 	fi
 
 	# if I found something above the variable wouldn't be null (no property) or "" (no value set). or it would still be unset if we don't have a params file.
 	# if this is the case read from the template file to see if it has a defaultValue
-	if [ -z $artifactsLocation ] || [ $artifactsLocation == "" ] || [ $artifactsLocation == "null" ]; 
-		artifactsLocation=$(grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation.defaultValue')
+	if [ -z $artifactsLocation ] || [ "$artifactsLocation" == "" ] || [ "$artifactsLocation" == "null" ]; then
+		artifactsLocation=`grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation.defaultValue'`
 	fi
 
 	# if it is empty still that means we don't have any location specified. 
 	# so we'll have to provide the URL of the storage account as a parameter later
-	if [ -z $artifactsLocation ] || [ $artifactsLocation == "" ];
+	if [ -z "$artifactsLocation" ] || [ "$artifactsLocation" == "" ]; then
 		artifactsUrlRequired=true
 	fi
 
 	# I will create a container that has the resourceGroupName (in lower letters) with -stageartifacts suffixed
-	resourceGroupNameLower=$(echo $resourceGroupName | tr "[:upper:]" "[:lower:]" | cut -c1-20)
+	resourceGroupNameLower=`echo $resourceGroupName | tr "[:upper:]" "[:lower:]" | cut -c1-20`
 	containername="${resourceGroupNameLower}-stageartifacts"
 
 	# was any storage account specified? 
 	if [ -z "$artifactsStorageAccount" ]; then
 		# if no storage account is specified get our subscription id, strip dashes, extract the first 10 chars
-		tempId=$(az account show | jq -r '.id' | tr -d '-' | cut -c1-10)
+		tempId=`az account show | jq -r '.id' | tr -d '-' | cut -c1-10`
 		# add that to some random numbers ($RANDOM is an in-built bash variable) to create a storage account name
 		artifactsStorageAccount="stage${tempId}${RANDOM}"
 		createstorageaccount=true
 		echo "No storage account was specified. Will create ${artifactsStorageAccount}"
 	else 
 		# a storage account was specified, lets see if it exists
-		testForStorageAccount=$(az storage account check-name --name ${artifactsStorageAccount} | jq '.nameAvailable')
-		if [ $testForStorageAccount == "true" ]; 
+		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq '.nameAvailable'`
+		if ["$testForStorageAccount" == "true" ]; then
 			# the account does not exist, we need to create it
 			createstorageaccount=true
 			echo "Specified storage account ${artifactsStorageAccount} does not exist and will be created"
@@ -168,7 +168,7 @@ if [ $uploadRequired == true ];
 	fi
 
 	# create a storage account if required
-	if [ $createstorageaccount == true ]; then
+	if [ "$createstorageaccount" == "true" ]; then
 		az storage account create -n $artifactsStorageAccount -g $resourceGroupName -l $resourceGroupLocation --sku Standard_LRS
 		
 		# if that went well create the container
@@ -180,7 +180,7 @@ if [ $uploadRequired == true ];
 	fi	
 
 	# generate a SAS token and URL as we need it (there was nothing found in the template/ parameters file above)
-	if [ $artifactsUrlRequired == true ];
+	if [ "$artifactsUrlRequired" == "true" ]; then
 		# generate a SAS token
 		if [ $(uname) == "Darwin" ]; then
 			sasexpiry=`date -v+2H '+%Y-%m-%dT%H:%MZ'`
@@ -201,8 +201,10 @@ fi
 
 # Start deployment
 echo "Starting deployment..."
-if [ $artifactsUrlRequired == false ];
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
+if [ "$artifactsUrlRequired" == "false" ]; then
+	#az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
+	echo "1"
 else
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
+	#az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
+	echo "11"
 fi
