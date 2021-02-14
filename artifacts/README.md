@@ -1,0 +1,1 @@
+Add your template json and parameters json (if any). Also any scripts, cloud init files etc. you'd like to upload into the VM. See [this repo of mine](https://github.com/rakheshster/github-runner-on-ubuntu) for an example. 
