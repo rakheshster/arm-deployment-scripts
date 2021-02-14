@@ -23,7 +23,7 @@ function usage() {
 # check if we are logged in and exit script if not.
 # this is a little workaround to see if we are still logged in. the `list-locations` subcommand needs you to be logged in.
 # other `az account` subcommands seem to rely on cached information.
-az account list-locations >/dev/null || exit 1
+az account list-locations >/dev/null || exit 1;
 
 # check for the jq command
 if ! command -v jq &> /dev/null; then echo "Cannot find jq. Please install it and retry."; exit 1; fi
@@ -63,13 +63,13 @@ if [ -z "$resourceGroupName" ]; then
 	usage
 else
 	# check if the resourcegroup exists
-	rgLocation=$(az group list | jq -r --arg resourceGroupName "$resourceGroupName" 'map(select(.name == "$resourceGroupName")) | .[] | .location')
-	if [ -z $rgLocation ]; then
-		# all good, let's capture the location for future use
+	rgLocation=`az group list | jq -r --arg resourceGroupName "$resourceGroupName" 'map(select(.name == $resourceGroupName)) | .[] | .location'`
+	if [ -n $rgLocation ]; then
+		# $rgLocation is not empty; that means the resourceGroup exists. let's capture the location for future use
 		resourceGroupLocation=$rgLocation
 		echo "Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}"
 	else
-		if [ ! -z $resourceGroupLocation ]; then
+		if [ -n $resourceGroupLocation ]; then
 			# the resource group doesn't exist but we do have a location so let's create one
 			echo "Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}"
 			az group create --name $resourceGroupName --location $resourceGroupLocation
@@ -176,7 +176,8 @@ if [ "$uploadRequired" == "true" ]; then
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
 			echo "Error creating a storage account ${artifactsStorageAccount}"
-			exit 1
+			exit 1;
+		fi
 	fi	
 
 	# generate a SAS token and URL as we need it (there was nothing found in the template/ parameters file above)
@@ -187,8 +188,9 @@ if [ "$uploadRequired" == "true" ]; then
 		else
 			sasexpiry=`date -u -d "2 hours" '+%Y-%m-%dT%H:%MZ'`
 		fi
-		artifactsLocationSasToken=$(az storage container generate-sas --account-name ${artifactsStorageAccount} --as-user --auth-mode login --expiry $sasexpiry --name ${containername} --permissions r)
-		artifactsLocationBlobEndpoint=$(az storage account show --name ${artifactsStorageAccount} | jq -r '.primaryEndpoints.blob')
+
+		artifactsLocationSasToken=`az storage container generate-sas --account-name ${artifactsStorageAccount} --as-user --auth-mode login --expiry $sasexpiry --name ${containername} --permissions r`
+		artifactsLocationBlobEndpoint=`az storage account show --name ${artifactsStorageAccount} | jq -r '.primaryEndpoints.blob'`
 		artifactsLocation="${artifactsLocationBlobEndpoint}${containername}/"
 	fi
 
@@ -202,9 +204,7 @@ fi
 # Start deployment
 echo "Starting deployment..."
 if [ "$artifactsUrlRequired" == "false" ]; then
-	#az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
-	echo "1"
+	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
 else
-	#az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
-	echo "11"
+	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
 fi
