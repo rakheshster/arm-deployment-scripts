@@ -1,122 +1,104 @@
 #!/bin/bash
-set -euo pipefail
-IFS=$'\n\t'
 
-# -e: immediately exit if any command has a non-zero exit status
-# -o: prevents errors in a pipeline from being masked
-# IFS new value is less likely to cause confusing bugs when looping arrays or arguments (e.g. $@)
+usage()
+{
+    echo "Usage: $0 -g <resourceGroupName> -l <resourceGroupLocation> -s <scriptstorageaccount> " 1>&2; exit 1;
+}
 
-usage() { echo "Usage: $0 -i <subscriptionId> -g <resourceGroupName> -n <deploymentName> -l <resourceGroupLocation>" 1>&2; exit 1; }
+stagecustomscript()
+{
+    azure storage account show $scriptstorageaccount -g $resourceGroupName
+    if [ $? -eq 1 ]
+    then
+        echo Creating storate account $scriptstorageaccount in RG $resourceGroupName in $resourceGroupLocation
+        azure storage account create $scriptstorageaccount -g $resourceGroupName -l $resourceGroupLocation --kind Storage --sku-name LRS
+    fi
 
-declare subscriptionId=""
-declare resourceGroupName=""
-declare deploymentName=""
-declare resourceGroupLocation=""
+    key=$(azure storage account keys list $scriptstorageaccount -g $resourceGroupName | grep -o 'key1\s*[^ ]*' | cut -d' ' -f3)
+    echo Uploading custom script to $scriptstorageaccount
+
+    containername='scripts'
+
+    azure storage container show -a $scriptstorageaccount -k $key $containername
+    if [ $? -eq 1 ]
+    then
+        echo Creating Container $containername
+        azure storage container create --container $containername -p Blob -a $scriptstorageaccount -k $key
+    fi
+    azure storage blob upload -f ./configuressl.sh -a $scriptstorageaccount -k $key --container $containername -q
+}
 
 # Initialize parameters specified from command line
-while getopts ":i:g:n:l:" arg; do
-	case "${arg}" in
-		i)
-			subscriptionId=${OPTARG}
-			;;
+while getopts ":g:l:s:" o; do
+	case "${o}" in
 		g)
 			resourceGroupName=${OPTARG}
-			;;
-		n)
-			deploymentName=${OPTARG}
 			;;
 		l)
 			resourceGroupLocation=${OPTARG}
 			;;
+        s) scriptstorageaccount=${OPTARG}
+            ;;
 		esac
 done
 shift $((OPTIND-1))
 
 #Prompt for parameters is some required parameters are missing
-if [[ -z "$subscriptionId" ]]; then
-	echo "Your subscription ID can be looked up with the CLI using: az account show --out json "
-	echo "Enter your subscription ID:"
-	read subscriptionId
-	[[ "${subscriptionId:?}" ]]
-fi
-
-if [[ -z "$resourceGroupName" ]]; then
-	echo "This script will look for an existing resource group, otherwise a new one will be created "
-	echo "You can create new resource groups with the CLI using: az group create "
-	echo "Enter a resource group name"
+if [ -z "$resourceGroupName" ]; then
+	echo "ResourceGroupName:"
 	read resourceGroupName
-	[[ "${resourceGroupName:?}" ]]
 fi
 
-if [[ -z "$deploymentName" ]]; then
-	echo "Enter a name for this deployment:"
-	read deploymentName
-fi
-
-if [[ -z "$resourceGroupLocation" ]]; then
-	echo "If creating a *new* resource group, you need to set a location "
-	echo "You can lookup locations with the CLI using: az account list-locations "
-	
-	echo "Enter resource group location:"
+if [ -z "$resourceGroupLocation" ]; then
+	echo "Enter a location below to create a new resource group else skip this"
+	echo "ResourceGroupLocation:"
 	read resourceGroupLocation
 fi
 
-#templateFile Path - template file to be used
-templateFilePath="template.json"
-
-if [ ! -f "$templateFilePath" ]; then
-	echo "$templateFilePath not found"
-	exit 1
+if [ -z "$scriptstorageaccount" ]; then
+	echo "Enter the name of the storage account below to store the custom script"
+	echo "scriptstorageaccount:"
+	read scriptstorageaccount
 fi
+
+#templateFile Path - template file to be used
+templateFilePath="azuredeploy.json"
 
 #parameter file path
-parametersFilePath="parameters.json"
+parametersFilePath="azuredeploy.parameters.json"
 
-if [ ! -f "$parametersFilePath" ]; then
-	echo "$parametersFilePath not found"
-	exit 1
-fi
-
-if [ -z "$subscriptionId" ] || [ -z "$resourceGroupName" ] || [ -z "$deploymentName" ]; then
-	echo "Either one of subscriptionId, resourceGroupName, deploymentName is empty"
+if  [ -z "$resourceGroupName" ] || [ -z "$scriptstorageaccount" ]; then
+	echo "Either one of subscriptionId, resourceGroupName, deploymentName, scriptstorageaccount is empty"
 	usage
 fi
 
 #login to azure using your credentials
-az account show 1> /dev/null
-
-if [ $? != 0 ];
-then
-	az login
-fi
+#azure login
 
 #set the default subscription id
-az account set --subscription $subscriptionId
+#azure account set $subscriptionId
 
-set +e
+#switch the mode to azure resource manager
+azure config mode arm
 
-#Check for existing RG
-az group show --name $resourceGroupName 1> /dev/null
-
-if [ $? != 0 ]; then
-	echo "Resource group with name" $resourceGroupName "could not be found. Creating new resource group.."
-	set -e
-	(
-		set -x
-		az group create --name $resourceGroupName --location $resourceGroupLocation 1> /dev/null
-	)
-	else
+#Check for existing resource group
+if [ -z "$resourceGroupLocation" ] ;
+then
 	echo "Using existing resource group..."
+else
+	echo "Creating a new resource group..."
+	azure group create --name $resourceGroupName --location $resourceGroupLocation
 fi
+
+stagecustomscript
+
+cp ./azuredeploy.parameters.json.template ./azuredeploy.parameters.json
+
+sed -i 's/REPLACE_SCRIPTSTORAGERG/'$resourceGroupName'/g' ./azuredeploy.parameters.json
+sed -i 's/REPLACE_SCRIPTSTORAGE/'$scriptstorageaccount'/g' ./azuredeploy.parameters.json
+
+azure config mode arm
 
 #Start deployment
 echo "Starting deployment..."
-(
-	set -x
-	az group deployment create --name "$deploymentName" --resource-group "$resourceGroupName" --template-file "$templateFilePath" --parameters "@${parametersFilePath}"
-)
-
-if [ $?  == 0 ];
- then
-	echo "Template has been successfully deployed"
-fi
+azure group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
