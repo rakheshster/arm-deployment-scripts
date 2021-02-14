@@ -27,3 +27,5 @@ Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminde
 
 ## The Bash script
 The Bash script `deploy.sh` does none of this but I am working on it to sort of bring it up to par with the PowerShell script. Also, it was using the older `azure` commands than the newer `az` ones so was broken to begin. I may or may not succeed as I am doing it mainly for kicks. Thanks to PowerShell Core one can use the PowerShell scripts from macOS or Linux and so we don't really need the Bash script. 
+
+*Note*: As long as this warning is present please consider `deploy.sh` as not working. 
