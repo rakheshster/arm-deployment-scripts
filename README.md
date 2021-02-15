@@ -1,8 +1,6 @@
 # What is this?
 
-This repo is probably of not much use to anyone but I wanted to put it up in GitHub just in case anyways. 
-
-When I started with ARM some years ago the exported template from Azure had a bunch of deployment scripts. I never used them but I wanted to take a look at them today and couldn't find them anymore. Looks like the default exported templates don't contain these any more. Sounds like these scripts were present as late as 2019 as I found mention of them on [this blog post](https://iddles.co.uk/index.php/2019/11/09/azure-arm-concepts/). 
+When I started with ARM some years ago the exported template from Azure had a bunch of deployment scripts. I never used them but I wanted to take a look at them today (Feb 2021) and couldn't find them anymore. Looks like the default exported templates don't contain these any more. Sounds like these scripts were present as late as 2019 as I found mention of them on [this blog post](https://iddles.co.uk/index.php/2019/11/09/azure-arm-concepts/). 
 
 Luckily I had an older exported template lying around and it had these scripts so I'll put them up here in the `originals` folders. 
 
@@ -12,10 +10,9 @@ I found a Bash version that sort of does this in the official quick start templa
 
 I might modify these scripts so I've tagged a `v0` release so anyone looking for the official version of these scripts can use that instead. 
 
-# Updates
-I have modified the two PowerShell scripts to make them more OS agnostic. 
+While this repo began as a place to put the original scripts I am now using it to focus mainly on the two PowerShell and one Bash scripts. 
 
-## The PowerShell script
+# The PowerShell script
 Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminder, I didn't create this so this is mostly me working backwards to understand what it does). 
 
   * It expects a `$ArtifactStagingDirectory` variable pointing to a local directory containing artifacts to upload and a `$ResourceGroupLocation` variable pointing to an Azure location. 
@@ -25,7 +22,7 @@ Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminde
   * If an upload is required and you have specified a storage account name `$StorageAccountName` it creates it if it does not already exist (this is where the Azure location `$ResourceGroupLocation` comes into play); and uploads the contents of `$ArtifactStagingDirectory` to a container it creates within this storage account in either case. 
   * It also checks if `_artifactsLocation` parameter actually has any value (in the template or parameters). If there is a value then it is assumed it must be pointing to a URL in the storage account that was specified so we don't really need to do anything. If there is no value then it generates a URL and SAS token to the storage account that was created and passes that to the actual deployment cmdlet. 
 
-## The Bash script
-The Bash script `deploy.sh` does none of this but I am working on it to sort of bring it up to par with the PowerShell script. Also, it was using the older `azure` commands than the newer `az` ones so was broken to begin. I may or may not succeed as I am doing it mainly for kicks. Thanks to PowerShell Core one can use the PowerShell scripts from macOS or Linux and so we don't really need the Bash script. 
+I have since modified it to be more OS agnostic. 
 
-*Note*: As long as this warning is present please consider `deploy.sh` as not working. 
+# The Bash script
+The original Bash script `deploy.sh` did none of the above. Moreover it used the older `azure` than newer `az` commands so was in need of a huge update. I have reworked it entirely to now be kind of on-par with the PowerShell script. There are some differences in terms of its parameters (e.g. there's no parameter to upload artifacts anyways) but it does pretty much everything else and I am quite pleased with it. This was something I undertook just for kicks (get familiar with the `az` commands and do some Bash scripting). Thanks to PowerShell Core one can use the PowerShell scripts from macOS or Linux and so we don't really need a Bash script. 
