@@ -62,18 +62,19 @@ if [ -z $artifactsStagingDirectory ]; then
 	usage
 fi
 
+unset rgLocation
 # Show usage and exit if mandatory parameters are not specified
 if [ -z "$resourceGroupName" ]; then
 	usage
 else
 	# check if the resourcegroup exists
 	rgLocation=`az group list | jq -r --arg resourceGroupName "$resourceGroupName" 'map(select(.name == $resourceGroupName)) | .[] | .location'`
-	if [ -n $rgLocation ]; then
+	if [ ! -z "$rgLocation" ]; then
 		# $rgLocation is not empty; that means the resourceGroup exists. let's capture the location for future use
 		resourceGroupLocation=$rgLocation
 		echo -e "${blue}Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}${normal}"
 	else
-		if [ -n $resourceGroupLocation ]; then
+		if [ ! -z "$resourceGroupLocation" ]; then
 			# the resource group doesn't exist but we do have a location so let's create one
 			echo -e "${yellow}Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}${normal}"
 			az group create --name $resourceGroupName --location $resourceGroupLocation
@@ -112,7 +113,7 @@ unset uploadRequired
 unset artifactsUrlRequired
 # Check the template file to see if there's any mention of artifacts
 # jq doesn't like comments so I strip them out first
-testForArtifacts=`grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation'`
+testForArtifacts=`grep -v "^\s*//" ${templateFilePath} | jq -r '.parameters._artifactsLocation'`
 if [ "$testForArtifacts" == "null" ]; then
 	uploadRequired=false
 else
@@ -128,13 +129,13 @@ if [ "$uploadRequired" == "true" ]; then
 
 	# if there's a parameters file read it for the value of artifacts location & token
 	if [ ! -z "$parametersFilePath" ]; then
-		artifactsLocation=`grep -v "^\s*//" ${parametersFilePath} | jq '.parameters._artifactsLocation.value'`
+		artifactsLocation=`grep -v "^\s*//" ${parametersFilePath} | jq -r '.parameters._artifactsLocation.value'`
 	fi
 
 	# if I found something above the variable wouldn't be null (no property) or "" (no value set). or it would still be unset if we don't have a params file.
 	# if this is the case read from the template file to see if it has a defaultValue
 	if [ -z $artifactsLocation ] || [ "$artifactsLocation" == "" ] || [ "$artifactsLocation" == "null" ]; then
-		artifactsLocation=`grep -v "^\s*//" ${templateFilePath} | jq '.parameters._artifactsLocation.defaultValue'`
+		artifactsLocation=`grep -v "^\s*//" ${templateFilePath} | jq -r '.parameters._artifactsLocation.defaultValue'`
 	fi
 
 	# if it is empty still that means we don't have any location specified. 
@@ -157,17 +158,17 @@ if [ "$uploadRequired" == "true" ]; then
 		echo -e "${blue}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
 	else 
 		# a storage account was specified, lets see if it exists
-		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq '.nameAvailable'`
-		if ["$testForStorageAccount" == "true" ]; then
-			# the account does not exist, we need to create it
-			createstorageaccount=true
-			echo -e "${blue}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"
-		else
+		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq -r '.nameAvailable'`
+		if [ "$testForStorageAccount" == "false" ]; then
 			# the account exists and we can use that
 			createstorageaccount=false
 			echo -e "${blue}Found storage account ${artifactsStorageAccount}${normal}"
 			# create the container within this storage account
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
+		else
+			# the account does not exist, we need to create it
+			createstorageaccount=true
+			echo -e "${blue}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"			
 		fi
 	fi
 
@@ -186,17 +187,21 @@ if [ "$uploadRequired" == "true" ]; then
 	fi	
 
 	# generate a SAS token and URL as we need it (there was nothing found in the template/ parameters file above)
+	# set the expiry of this to be 10 mins
 	if [ "$artifactsUrlRequired" == "true" ]; then
 		# generate a SAS token
 		if [ $(uname) == "Darwin" ]; then
-			sasexpiry=`date -v+2H '+%Y-%m-%dT%H:%MZ'`
+			sasexpiry=`date -v+10M '+%Y-%m-%dT%H:%MZ'`
 		else
-			sasexpiry=`date -u -d "2 hours" '+%Y-%m-%dT%H:%MZ'`
+			sasexpiry=`date -u -d "10 minutes" '+%Y-%m-%dT%H:%MZ'`
 		fi
 
+		echo -e "${blue}Creating access tokens and URI${normal}"
 		artifactsLocationSasToken=`az storage container generate-sas --account-name ${artifactsStorageAccount} --as-user --auth-mode login --expiry $sasexpiry --name ${containername} --permissions r`
-		artifactsLocationBlobEndpoint=`az storage account show --name ${artifactsStorageAccount} | jq -r '.primaryEndpoints.blob'`
+		artifactsLocationBlobEndpoint=`az storage account show --name ${artifactsStorageAccount} -g $resourceGroupName | jq -r '.primaryEndpoints.blob'`
 		artifactsLocation="${artifactsLocationBlobEndpoint}${containername}/"
+			echo "artifactsLocation is $artifactsLocation"
+			echo "artifactsLocationSasToken is $artifactsLocationSasToken"
 	fi
 
 	# now let's upload
@@ -209,7 +214,7 @@ fi
 # Start deployment
 echo -e "${blue}Starting deployment...${normal}"
 if [ "$artifactsUrlRequired" == "false" ]; then
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
+	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters $parametersFilePath
 else
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
+	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
 fi
