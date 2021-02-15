@@ -155,7 +155,7 @@ if [ "$uploadRequired" == "true" ]; then
 		# add that to some random numbers ($RANDOM is an in-built bash variable) to create a storage account name
 		artifactsStorageAccount="stage${tempId}${RANDOM}"
 		createstorageaccount=true
-		echo -e "${blue}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
+		echo -e "${yellow}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
 	else 
 		# a storage account was specified, lets see if it exists
 		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq -r '.nameAvailable'`
@@ -164,11 +164,13 @@ if [ "$uploadRequired" == "true" ]; then
 			createstorageaccount=false
 			echo -e "${blue}Found storage account ${artifactsStorageAccount}${normal}"
 			# create the container within this storage account
+			echo -e "${yellow}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${blue}If this step fails it could be that the specified storage account exists but does not belong to you${normal}"
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
 			# the account does not exist, we need to create it
 			createstorageaccount=true
-			echo -e "${blue}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"			
+			echo -e "${yello}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"			
 		fi
 	fi
 
@@ -178,7 +180,7 @@ if [ "$uploadRequired" == "true" ]; then
 		
 		# if that went well create the container
 		if [ $? -eq 0 ]; then
-			echo -e "${blue}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${yellow}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
 			echo -e "${red}Error creating a storage account ${artifactsStorageAccount}${normal}"
@@ -191,17 +193,21 @@ if [ "$uploadRequired" == "true" ]; then
 	if [ "$artifactsUrlRequired" == "true" ]; then
 		# generate a SAS token
 		if [ $(uname) == "Darwin" ]; then
-			sasexpiry=`date -v+10M '+%Y-%m-%dT%H:%MZ'`
+			sasexpiry=`date -v+2H '+%Y-%m-%dT%H:%MZ'`
 		else
-			sasexpiry=`date -u -d "10 minutes" '+%Y-%m-%dT%H:%MZ'`
+			sasexpiry=`date -u -d "2 hours" '+%Y-%m-%dT%H:%MZ'`
 		fi
 
 		echo -e "${blue}Creating access tokens and URI${normal}"
-		artifactsLocationSasToken=`az storage container generate-sas --account-name ${artifactsStorageAccount} --as-user --auth-mode login --expiry $sasexpiry --name ${containername} --permissions r`
+		# create a storage account token
+		# https only; read permissions only 'r'; to the blob service only 'b'; for resource types container and object only 'co'
+		# the token needs some massaging to remove " and convert %3A to :. Plus I gotta add a ?
+		artifactsLocationSasTokenTemp=`az storage account generate-sas --permissions r --account-name ${artifactsStorageAccount} --services b --resource-types co --expiry $sasexpiry | jq -r`
+		artifactsLocationSasTokenTemp2=`echo $artifactsLocationSasTokenTemp | sed 's/%3A/:/'`
+		artifactsLocationSasToken="?${artifactsLocationSasTokenTemp2}"
+		
 		artifactsLocationBlobEndpoint=`az storage account show --name ${artifactsStorageAccount} -g $resourceGroupName | jq -r '.primaryEndpoints.blob'`
 		artifactsLocation="${artifactsLocationBlobEndpoint}${containername}/"
-			echo "artifactsLocation is $artifactsLocation"
-			echo "artifactsLocationSasToken is $artifactsLocationSasToken"
 	fi
 
 	# now let's upload
@@ -214,7 +220,7 @@ fi
 # Start deployment
 echo -e "${blue}Starting deployment...${normal}"
 if [ "$artifactsUrlRequired" == "false" ]; then
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters $parametersFilePath
+	az deployment group create --resource-group "$resourceGroupName" --template-file "$templateFilePath" --parameters "$parametersFilePath"
 else
-	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters $parametersFilePath --parameters _artifactsLocation=${artifactsLocation} --parameters _artifactsLocationSasToken=${artifactsLocationSasToken}
+	az deployment group create --resource-group "$resourceGroupName" --template-file "$templateFilePath" --parameters "$parametersFilePath" --parameters _artifactsLocation="${artifactsLocation}" --parameters _artifactsLocationSasToken="${artifactsLocationSasToken}"
 fi
