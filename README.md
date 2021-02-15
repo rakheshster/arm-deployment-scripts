@@ -8,9 +8,7 @@ These default scripts are pretty limited though. I have since come across two ot
 
 I found a Bash version that sort of does this in the official quick start templates at [this link](https://github.com/Azure/azure-quickstart-templates/blob/master/201-vmss-ubuntu-web-ssl/deploy.sh). And the PowerShell version can be found at [this link](https://github.com/Azure/azure-quickstart-templates/blob/master/Deploy-AzTemplate.ps1). I didn't want to risk losing them so I've added these to this repo. 
 
-I might modify these scripts so I've tagged a `v0` release so anyone looking for the official version of these scripts can use that instead. 
-
-While this repo began as a place to put the original scripts I am now using it to focus mainly on the two PowerShell and one Bash scripts. 
+While this repo began as a place to put the original scripts I am now using it to focus mainly on the two PowerShell and one Bash scripts. To make it easy for others I have tagged a `v0` release so anyone looking for the official version of these scripts can use that instead. 
 
 # The PowerShell script
 Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminder, I didn't create this so this is mostly me working backwards to understand what it does). 
