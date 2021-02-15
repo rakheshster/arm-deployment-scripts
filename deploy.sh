@@ -201,10 +201,9 @@ if [ "$uploadRequired" == "true" ]; then
 		echo -e "${blue}Creating access tokens and URI${normal}"
 		# create a storage account token
 		# https only; read permissions only 'r'; to the blob service only 'b'; for resource types container and object only 'co'
-		# the token needs some massaging to remove " and convert %3A to :. Plus I gotta add a ?
+		# the token needs some massaging to remove " and I gotta add a ?
 		artifactsLocationSasTokenTemp=`az storage account generate-sas --permissions r --account-name ${artifactsStorageAccount} --services b --resource-types co --expiry $sasexpiry | jq -r`
-		artifactsLocationSasTokenTemp2=`echo $artifactsLocationSasTokenTemp | sed 's/%3A/:/'`
-		artifactsLocationSasToken="?${artifactsLocationSasTokenTemp2}"
+		artifactsLocationSasToken="?${artifactsLocationSasTokenTemp}"
 		
 		artifactsLocationBlobEndpoint=`az storage account show --name ${artifactsStorageAccount} -g $resourceGroupName | jq -r '.primaryEndpoints.blob'`
 		artifactsLocation="${artifactsLocationBlobEndpoint}${containername}/"
