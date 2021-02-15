@@ -6,17 +6,21 @@ IFS=$'\n\t'
 # -o: prevents errors in a pipeline from being masked
 # IFS new value is less likely to cause confusing bugs when looping arrays or arguments (e.g. $@)
 
-function usage() {
-	blue=$(tput setaf 4)
-	normal=$(tput sgr0)
-	powder_blue=$(tput setaf 153)
-	bold=$(tput bold)
-	underline=$(tput smul)
-	# https://stackoverflow.com/questions/4332478/read-the-current-text-color-in-a-xterm/4332530#4332530 more colours
+# defining some colours
+# see https://stackoverflow.com/questions/4332478/read-the-current-text-color-in-a-xterm/4332530#4332530 for more
+normal=$(tput sgr0)
+blue=$(tput setaf 4)
+powder_blue=$(tput setaf 153)
+yellow=$(tput setaf 3)
+lime_yellow=$(tput setaf 190)
+red=$(tput setaf 1)
+bold=$(tput bold)
+underline=$(tput smul)
 
+function usage {
     printf "%s\n\n" "${blue}Usage:${normal} $0 -g <resourceGroupName> -d <artifactsStagingDirectory> [-l <resourceGroupLocation>] [-s <artifactsStorageAccount>] [-t <templateFilePath>] [-p <parametersFilePath>]" 1>&2; 
 
-	printf "%s\n\n" "${powder_blue}Note:${normal} if the template contains an ${bold}_artifactsLocation${normal} parameter then the contents of <artifactsStagingDirectory> will be uploaded to a storage account you specify via <artifactsStorageAccount> (or ${underline}a random storage account will be created for this purpose${normal})"  1>&2;
+	printf "%s\n\n" "${powder_blue}Note:${normal} if the template contains an ${bold}_artifactsLocation${normal} parameter then the contents of <artifactsStagingDirectory> will be uploaded to a storage account you specify via <artifactsStorageAccount> (if none specified ${underline}a random storage account will be created for this purpose${normal})"  1>&2;
 	exit 1;
 }
 
@@ -67,14 +71,14 @@ else
 	if [ -n $rgLocation ]; then
 		# $rgLocation is not empty; that means the resourceGroup exists. let's capture the location for future use
 		resourceGroupLocation=$rgLocation
-		echo "Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}"
+		echo -e "${blue}Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}${normal}"
 	else
 		if [ -n $resourceGroupLocation ]; then
 			# the resource group doesn't exist but we do have a location so let's create one
-			echo "Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}"
+			echo -e "${yellow}Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}${normal}"
 			az group create --name $resourceGroupName --location $resourceGroupLocation
 		else
-			echo "Unable to find resource group ${resourceGroupName} and no location's specified to create a new one"
+			echo -e "${red}Unable to find resource group ${resourceGroupName} and no location's specified to create a new one${normal}"
 			exit 1
 		fi
 	fi
@@ -85,9 +89,9 @@ if [ -z "$templateFilePath" ]; then
 	templateFilePath="${artifactsStagingDirectory}/azuredeploy.json"
 	
 	if [ -e "$templateFilePath" ]; then
-		echo "Found and will use ${templateFilePath} as the template"
+		echo -e "${blue}Found and will use ${templateFilePath} as the template${normal}"
 	else
-		echo "Missing templateFilePath. Tried ${templateFilePath}"
+		echo -e "${red}Missing templateFilePath. Tried ${templateFilePath}${normal}"
 		exit 1
 	fi
 fi
@@ -97,9 +101,9 @@ if [ -z "$parametersFilePath" ]; then
 	parametersFilePath="${artifactsStagingDirectory}/azuredeploy.parameters.json"
 
 	if [ -e "$parametersFilePath" ]; then
-		echo "Found and will use ${parametersFilePath} as the parameters file"
+		echo -e "${blue}Found and will use ${parametersFilePath} as the parameters file${normal}"
 	else
-		echo "Continuing without a parameters file as none was specifed and nothing found at ${parametersFilePath} either"
+		echo -e "${yellow}Continuing without a parameters file as none was specifed and nothing found at ${parametersFilePath} either${normal}"
 		unset parametersFilePath
 	fi
 fi
@@ -150,18 +154,18 @@ if [ "$uploadRequired" == "true" ]; then
 		# add that to some random numbers ($RANDOM is an in-built bash variable) to create a storage account name
 		artifactsStorageAccount="stage${tempId}${RANDOM}"
 		createstorageaccount=true
-		echo "No storage account was specified. Will create ${artifactsStorageAccount}"
+		echo -e "${blue}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
 	else 
 		# a storage account was specified, lets see if it exists
 		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq '.nameAvailable'`
 		if ["$testForStorageAccount" == "true" ]; then
 			# the account does not exist, we need to create it
 			createstorageaccount=true
-			echo "Specified storage account ${artifactsStorageAccount} does not exist and will be created"
+			echo -e "${blue}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"
 		else
 			# the account exists and we can use that
 			createstorageaccount=false
-			echo "Found storage account ${artifactsStorageAccount}"
+			echo -e "${blue}Found storage account ${artifactsStorageAccount}${normal}"
 			# create the container within this storage account
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		fi
@@ -173,9 +177,10 @@ if [ "$uploadRequired" == "true" ]; then
 		
 		# if that went well create the container
 		if [ $? -eq 0 ]; then
+			echo -e "${blue}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
-			echo "Error creating a storage account ${artifactsStorageAccount}"
+			echo -e "${red}Error creating a storage account ${artifactsStorageAccount}${normal}"
 			exit 1;
 		fi
 	fi	
@@ -202,7 +207,7 @@ if [ "$uploadRequired" == "true" ]; then
 fi
 
 # Start deployment
-echo "Starting deployment..."
+echo -e "${blue}Starting deployment...${normal}"
 if [ "$artifactsUrlRequired" == "false" ]; then
 	az group deployment create --resource-group $resourceGroupName --template-file $templateFilePath --parameters-file $parametersFilePath
 else
