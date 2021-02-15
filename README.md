@@ -11,7 +11,7 @@ I found a Bash version that sort of does this in the official quick start templa
 While this repo began as a place to put the original scripts I am now using it to focus mainly on the two PowerShell and one Bash scripts. To make it easy for others I have tagged a `v0` release so anyone looking for the official version of these scripts can use that instead. 
 
 # The PowerShell script
-Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminder, I didn't create this so this is mostly me working backwards to understand what it does). 
+Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminder, I didn't create this so this is mostly me working backwards to understand what it does). I made some cosmetic changes to the script and made it a bit OS agnostic, but otherwise it is pretty much how I found it. 
 
   * It expects a `$ArtifactStagingDirectory` variable pointing to a local directory containing artifacts to upload and a `$ResourceGroupLocation` variable pointing to an Azure location. 
   * If not manually specified, it expects the template and parameters file to be in this `$ArtifactStagingDirectory` directory along with any other files to upload. 
@@ -19,8 +19,6 @@ Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminde
   * There's a special case too like do an upload anyways via an `$UploadArtifacts` parameter irrespective of `_artifactsLocation` being present or not.
   * If an upload is required and you have specified a storage account name `$StorageAccountName` it creates it if it does not already exist (this is where the Azure location `$ResourceGroupLocation` comes into play); and uploads the contents of `$ArtifactStagingDirectory` to a container it creates within this storage account in either case. 
   * It also checks if `_artifactsLocation` parameter actually has any value (in the template or parameters). If there is a value then it is assumed it must be pointing to a URL in the storage account that was specified so we don't really need to do anything. If there is no value then it generates a URL and SAS token to the storage account that was created and passes that to the actual deployment cmdlet. 
-
-I have since modified it to be more OS agnostic. 
 
 # The Bash script
 The original Bash script `deploy.sh` did none of the above. Moreover it used the older `azure` than newer `az` commands so was in need of a huge update. I have reworked it entirely to now be kind of on-par with the PowerShell script. There are some differences in terms of its parameters (e.g. there's no parameter to upload artifacts anyways) but it does pretty much everything else and I am quite pleased with it. This was something I undertook just for kicks (get familiar with the `az` commands and do some Bash scripting). Thanks to PowerShell Core one can use the PowerShell scripts from macOS or Linux and so we don't really need a Bash script. 
