@@ -18,9 +18,11 @@ bold=$(tput bold)
 underline=$(tput smul)
 
 function usage {
-    printf "%s\n\n" "${blue}Usage:${normal} $0 -g <resourceGroupName> -d <artifactsStagingDirectory> [-l <resourceGroupLocation>] [-s <artifactsStorageAccount>] [-t <templateFilePath>] [-p <parametersFilePath>]" 1>&2; 
+    printf "%s\n\n" "${blue}Usage: ${normal}${bold} $0 -g <resourceGroupName> -d <artifactsStagingDirectory> [-l <resourceGroupLocation>] [-s <artifactsStorageAccount>] [-t <templateFilePath>] [-p <parametersFilePath>]${normal}" 1>&2; 
 
-	printf "%s\n\n" "${powder_blue}Note:${normal} if the template contains an ${bold}_artifactsLocation${normal} parameter then the contents of <artifactsStagingDirectory> will be uploaded to a storage account you specify via <artifactsStorageAccount> (if none specified ${underline}a random storage account will be created for this purpose${normal})"  1>&2;
+	printf "%s\n\n" "${powder_blue}==> ${normal} if the template contains an ${bold}_artifactsLocation${normal} parameter then the contents of <artifactsStagingDirectory> will be uploaded to a storage account you specify via <artifactsStorageAccount> (if none specified ${underline}a random storage account will be created for this purpose${normal})"  1>&2;
+
+	printf "%s\n\n" "${powder_blue}==> ${normal} if the specified resourceGroupName does not exist it will be created if resourceGroupLocation is specified"  1>&2;
 	exit 1;
 }
 
@@ -30,7 +32,10 @@ function usage {
 az account list-locations >/dev/null || exit 1;
 
 # check for the jq command
-if ! command -v jq &> /dev/null; then echo "Cannot find jq. Please install it and retry."; exit 1; fi
+if ! command -v jq &> /dev/null; then 
+	echo -e "${red}==> ${normal}${bold}Cannot find jq. Please install it and retry.{$normal}"; 
+	exit 1; 
+fi
 
 # Initialize parameters specified from command line
 while getopts ":g:d:s:l:t:p:" o; do
@@ -72,14 +77,14 @@ else
 	if [ ! -z "$rgLocation" ]; then
 		# $rgLocation is not empty; that means the resourceGroup exists. let's capture the location for future use
 		resourceGroupLocation=$rgLocation
-		echo -e "${blue}Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}${normal}"
+		echo -e "${blue}==> ${normal}{$bold}Specified resource group ${resourceGroupName} exists at location ${resourceGroupLocation}${normal}"
 	else
 		if [ ! -z "$resourceGroupLocation" ]; then
 			# the resource group doesn't exist but we do have a location so let's create one
-			echo -e "${yellow}Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}${normal}"
+			echo -e "${yellow}==> ${normal}{$bold}Couldn't find resource group ${resourceGroupName} so will create a new one at location ${resourceGroupLocation}${normal}"
 			az group create --name $resourceGroupName --location $resourceGroupLocation
 		else
-			echo -e "${red}Unable to find resource group ${resourceGroupName} and no location's specified to create a new one${normal}"
+			echo -e "${red}==> ${normal}{$bold}Unable to find resource group ${resourceGroupName} and no location's specified to create a new one${normal}"
 			exit 1
 		fi
 	fi
@@ -90,9 +95,9 @@ if [ -z "$templateFilePath" ]; then
 	templateFilePath="${artifactsStagingDirectory}/azuredeploy.json"
 	
 	if [ -e "$templateFilePath" ]; then
-		echo -e "${blue}Found and will use ${templateFilePath} as the template${normal}"
+		echo -e "${blue}==> ${normal}{$bold}Found and will use ${templateFilePath} as the template${normal}"
 	else
-		echo -e "${red}Missing templateFilePath. Tried ${templateFilePath}${normal}"
+		echo -e "${red}==> ${normal}{$bold}Missing templateFilePath. Tried ${templateFilePath}${normal}"
 		exit 1
 	fi
 fi
@@ -102,9 +107,9 @@ if [ -z "$parametersFilePath" ]; then
 	parametersFilePath="${artifactsStagingDirectory}/azuredeploy.parameters.json"
 
 	if [ -e "$parametersFilePath" ]; then
-		echo -e "${blue}Found and will use ${parametersFilePath} as the parameters file${normal}"
+		echo -e "${blue}==> ${normal}{$bold}Found and will use ${parametersFilePath} as the parameters file${normal}"
 	else
-		echo -e "${yellow}Continuing without a parameters file as none was specifed and nothing found at ${parametersFilePath} either${normal}"
+		echo -e "${yellow}==> ${normal}{$bold}Continuing without a parameters file as none was specifed and nothing found at ${parametersFilePath} either${normal}"
 		unset parametersFilePath
 	fi
 fi
@@ -155,35 +160,36 @@ if [ "$uploadRequired" == "true" ]; then
 		# add that to some random numbers ($RANDOM is an in-built bash variable) to create a storage account name
 		artifactsStorageAccount="stage${tempId}${RANDOM}"
 		createstorageaccount=true
-		echo -e "${yellow}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
+		echo -e "${yellow}==> ${normal}{$bold}No storage account was specified. Will create ${artifactsStorageAccount}${normal}"
 	else 
 		# a storage account was specified, lets see if it exists
 		testForStorageAccount=`az storage account check-name --name ${artifactsStorageAccount} | jq -r '.nameAvailable'`
 		if [ "$testForStorageAccount" == "false" ]; then
 			# the account exists and we can use that
 			createstorageaccount=false
-			echo -e "${blue}Found storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${blue}==> ${normal}{$bold}Found storage account ${artifactsStorageAccount}${normal}"
 			# create the container within this storage account
-			echo -e "${yellow}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
-			echo -e "${blue}If this step fails it could be that the specified storage account exists but does not belong to you${normal}"
+			echo -e "${powder_blue}==> ${normal}{$bold}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${yellow}==> ${normal}{$bold}If this step fails it could be that the specified storage account exists but does not belong to you${normal}"
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
 			# the account does not exist, we need to create it
 			createstorageaccount=true
-			echo -e "${yello}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"			
+			echo -e "${yellow}==> ${normal}{$bold}Specified storage account ${artifactsStorageAccount} does not exist and will be created${normal}"			
 		fi
 	fi
 
 	# create a storage account if required
 	if [ "$createstorageaccount" == "true" ]; then
+		echo -e "${blue}==> ${normal}{$bold}Creating storage account $artifactsStorageAccount in resource group $resourceGroupName${normal}"
 		az storage account create -n $artifactsStorageAccount -g $resourceGroupName -l $resourceGroupLocation --sku Standard_LRS
 		
 		# if that went well create the container
 		if [ $? -eq 0 ]; then
-			echo -e "${yellow}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${powder_blue}==> ${normal}{$bold}Creating a container ${containername} within storage account ${artifactsStorageAccount}${normal}"
 			az storage container create -n ${containername} --account-name ${artifactsStorageAccount}
 		else
-			echo -e "${red}Error creating a storage account ${artifactsStorageAccount}${normal}"
+			echo -e "${red}==> ${normal}{$bold}Error creating a storage account ${artifactsStorageAccount}${normal}"
 			exit 1;
 		fi
 	fi	
@@ -198,7 +204,7 @@ if [ "$uploadRequired" == "true" ]; then
 			sasexpiry=`date -u -d "2 hours" '+%Y-%m-%dT%H:%MZ'`
 		fi
 
-		echo -e "${blue}Creating access tokens and URI${normal}"
+		echo -e "${blue}==> ${normal}{$bold}Creating access tokens and URI${normal}"
 		# create a storage account token
 		# https only; read permissions only 'r'; to the blob service only 'b'; for resource types container and object only 'co'
 		# the token needs some massaging to remove " and I gotta add a ?
@@ -217,7 +223,7 @@ if [ "$uploadRequired" == "true" ]; then
 fi
 
 # Start deployment
-echo -e "${blue}Starting deployment...${normal}"
+echo -e "${blue}==> ${normal}{$bold}Starting deployment${normal}"
 if [ "$artifactsUrlRequired" == "false" ]; then
 	az deployment group create --resource-group "$resourceGroupName" --template-file "$templateFilePath" --parameters "$parametersFilePath"
 else
