@@ -29,7 +29,8 @@ function usage {
 # check if we are logged in and exit script if not.
 # this is a little workaround to see if we are still logged in. the `list-locations` subcommand needs you to be logged in.
 # other `az account` subcommands seem to rely on cached information.
-az account list-locations >/dev/null || exit 1;
+echo -e "${blue}==> ${normal}${bold}Checking if we are logged in${normal}"
+az account list-locations >/dev/null || exit 1; && echo -e "${powder_blue}==> {$normal}${bold}Success!${normal}"
 
 # check for the jq command
 if ! command -v jq &> /dev/null; then 
