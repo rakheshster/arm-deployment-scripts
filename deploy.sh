@@ -38,7 +38,9 @@ if ! command -v jq &> /dev/null; then
 	exit 1; 
 fi
 
-# Initialize parameters specified from command line
+# initialize parameters specified from command line
+# if a flag expects and argument put a ":" after it else skip
+# I start with a ":" because I want to disable getopts' error handling and do it myself
 while getopts ":g:d:s:l:t:p:" o; do
 	case "${o}" in
 		g)
@@ -59,17 +61,20 @@ while getopts ":g:d:s:l:t:p:" o; do
 		p)
 			parametersFilePath=${OPTARG}
 			;;
+		\?)
+			usage
+			;;
 	esac
 done
 shift $((OPTIND-1))
 
-# Show usage and exit if mandatory parameters are not specified
+# show usage and exit if mandatory parameters are not specified
 if [ -z $artifactsStagingDirectory ]; then 
 	usage
 fi
 
 unset rgLocation
-# Show usage and exit if mandatory parameters are not specified
+# show usage and exit if mandatory parameters are not specified
 if [ -z "$resourceGroupName" ]; then
 	usage
 else
