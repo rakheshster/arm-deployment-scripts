@@ -23,3 +23,6 @@ Here's what the PowerShell script `Deploy-AzTemplate.ps1` does. (A quick reminde
 
 # The Bash script
 The original Bash script `deploy.sh` did none of the above. Moreover it used the older `azure` than newer `az` commands so was in need of a huge update. I have reworked it entirely to now be kind of on-par with the PowerShell script. There are some differences in terms of its parameters (e.g. there's no parameter to upload artifacts anyways, and I don't create the storage account in a new resource group called `ARM_Deploy_Staging` but reuse the existing one). Other than these it does pretty much everything else and I am quite pleased with it. This was something I undertook just for kicks (get familiar with the `az` commands and do some Bash scripting). Thanks to PowerShell Core one can use the PowerShell scripts from macOS or Linux and so we don't really need a Bash script. 
+
+## Update (27 March 2021)
+Looks like there's an official bash script too just that I may have missed it. I found it today [here](https://github.com/Azure/azure-quickstart-templates/blob/master/az-group-deploy.sh). It and the PowerShell scripts are still in active development by Microsoft and looks like they are adding Bicep support too. 
